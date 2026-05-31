@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hardware Contention & Performance Analyzer</title>
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Plotly.js CDN -->
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(22, 27, 38, 0.7);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            
+            /* Theme colors matching backend */
+            --cyan-accent: #06b6d4;
+            --blue-accent: #3b82f6;
+            --violet-accent: #8b5cf6;
+            --coral-accent: #ef4444;
+            --emerald-accent: #10b981;
+            
+            --transition-speed: 0.25s;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+            line-height: 1.5;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 40%);
+            background-attachment: fixed;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+        }
+
+        /* Container Layout */
+        .dashboard-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        /* Header Area */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        .header-title-section h1 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 30%, var(--cyan-accent) 70%, var(--violet-accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .header-title-section p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-top: 0.25rem;
+        }
+
+        /* Machine Info Pill */
+        .machine-badge {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            gap: 1.5rem;
+            font-size: 0.85rem;
+            align-items: center;
+        }
+
+        .machine-info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .machine-info-item span.label {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .machine-info-item span.value {
+            color: var(--text-primary);
+            font-weight: 500;
+            margin-top: 0.1rem;
+        }
+
+        /* Filters Controls Toolbar */
+        .controls-toolbar {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .control-label {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Filter Buttons & Dropdowns styling */
+        .btn-group {
+            display: flex;
+            background: rgba(15, 23, 42, 0.6);
+            padding: 0.25rem;
+            border-radius: 10px;
+            border: 1px solid var(--panel-border);
+        }
+
+        .filter-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all var(--transition-speed);
+        }
+
+        .filter-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .filter-btn.active {
+            background: var(--violet-accent);
+            color: white;
+            box-shadow: 0 2px 10px rgba(139, 92, 246, 0.4);
+        }
+
+        .custom-select {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--panel-border);
+            color: var(--text-primary);
+            padding: 0.5rem 2.5rem 0.5rem 1rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            outline: none;
+            font-family: inherit;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1rem;
+            transition: border-color var(--transition-speed);
+        }
+
+        .custom-select:focus {
+            border-color: var(--cyan-accent);
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .stat-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(12px);
+            transition: transform var(--transition-speed), box-shadow var(--transition-speed);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+        }
+
+        .stat-card.system-cpu::after { background-color: var(--cyan-accent); }
+        .stat-card.system-ram::after { background-color: var(--blue-accent); }
+        .stat-card.target-cpu::after { background-color: var(--violet-accent); }
+        .stat-card.target-ram::after { background-color: rgba(139, 92, 246, 0.5); }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-val-container {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2.2rem;
+            font-weight: 700;
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-primary);
+        }
+
+        .stat-unit {
+            color: var(--text-muted);
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .stat-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        /* Charts Grid Layout */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .charts-column {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .chart-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+            min-height: 400px;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .chart-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 350px;
+        }
+
+        /* Sidebar Insights Panel */
+        .insights-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            max-height: 820px;
+            overflow-y: auto;
+        }
+
+        .insights-header {
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 0.75rem;
+        }
+
+        .insights-header h3 {
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--cyan-accent);
+        }
+
+        .insights-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .insight-item {
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            position: relative;
+        }
+
+        .insight-item.critical {
+            border-left: 3px solid var(--coral-accent);
+        }
+
+        .insight-item.warning {
+            border-left: 3px solid var(--blue-accent);
+        }
+
+        .insight-item.normal {
+            border-left: 3px solid var(--emerald-accent);
+        }
+
+        .insight-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .insight-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .insight-desc {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        /* Loading Spinner */
+        .spinner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 15, 25, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            border-radius: 16px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+
+        .spinner-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .spinner {
+            width: 45px;
+            height: 45px;
+            border: 3px solid rgba(139, 92, 246, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--violet-accent);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            text-align: center;
+            gap: 1rem;
+            padding: 2rem;
+        }
+        
+        .empty-state svg {
+            stroke: var(--text-muted);
+            width: 48px;
+            height: 48px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        <!-- 1. Header -->
+        <header>
+            <div class="header-title-section">
+                <h1>Hardware Performance Analyzer</h1>
+                <p>Monitor application execution health and identify system resource contentions</p>
+            </div>
+            
+            <div class="machine-badge" id="machine-badge">
+                <div class="machine-info-item">
+                    <span class="label">Host</span>
+                    <span class="value" id="meta-host">Loading...</span>
+                </div>
+                <div class="machine-info-item">
+                    <span class="label">OS</span>
+                    <span class="value" id="meta-os">Loading...</span>
+                </div>
+                <div class="machine-info-item">
+                    <span class="label">CPU Cores</span>
+                    <span class="value" id="meta-cores">Loading...</span>
+                </div>
+                <div class="machine-info-item">
+                    <span class="label">Total Memory</span>
+                    <span class="value" id="meta-ram">Loading...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 2. Controls Toolbar -->
+        <section class="controls-toolbar">
+            <!-- Time Window Select -->
+            <div class="control-group">
+                <span class="control-label">Range</span>
+                <div class="btn-group" id="range-buttons">
+                    <button class="filter-btn" data-range="24h">24 Hours</button>
+                    <button class="filter-btn active" data-range="7d">7 Days</button>
+                    <button class="filter-btn" data-range="30d">30 Days</button>
+                    <button class="filter-btn" data-range="all">All Time</button>
+                </div>
+            </div>
+
+            <!-- Granularity Select -->
+            <div class="control-group">
+                <span class="control-label">Granularity</span>
+                <div class="btn-group" id="granularity-buttons">
+                    <button class="filter-btn" data-gran="hour">Hourly</button>
+                    <button class="filter-btn active" data-gran="day">Daily</button>
+                    <button class="filter-btn" data-gran="month">Monthly</button>
+                </div>
+            </div>
+
+            <!-- Target Process Select -->
+            <div class="control-group">
+                <span class="control-label">Target App</span>
+                <select class="custom-select" id="process-select">
+                    <option value="simulation_engine.exe">simulation_engine.exe</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- 3. Key Stat Cards -->
+        <section class="stats-grid">
+            <div class="stat-card system-cpu">
+                <div class="stat-label">System CPU Avg</div>
+                <div class="stat-val-container">
+                    <span class="stat-value" id="avg-sys-cpu">0.0</span>
+                    <span class="stat-unit">%</span>
+                </div>
+                <div class="stat-subtitle">Overall hardware CPU load</div>
+            </div>
+
+            <div class="stat-card system-ram">
+                <div class="stat-label">System Memory Avg</div>
+                <div class="stat-val-container">
+                    <span class="stat-value" id="avg-sys-ram">0.0</span>
+                    <span class="stat-unit">%</span>
+                </div>
+                <div class="stat-subtitle">Total RAM utilized</div>
+            </div>
+
+            <div class="stat-card target-cpu">
+                <div class="stat-label" id="target-cpu-label">Target App CPU Avg</div>
+                <div class="stat-val-container">
+                    <span class="stat-value" id="avg-tgt-cpu">0.0</span>
+                    <span class="stat-unit">%</span>
+                </div>
+                <div class="stat-subtitle">Resource allocated to selected process</div>
+            </div>
+
+            <div class="stat-card target-ram">
+                <div class="stat-label" id="target-ram-label">Target App Memory Avg</div>
+                <div class="stat-val-container">
+                    <span class="stat-value" id="avg-tgt-ram">0.0</span>
+                    <span class="stat-unit">%</span>
+                </div>
+                <div class="stat-subtitle">Memory consumed by selected process</div>
+            </div>
+        </section>
+
+        <!-- 4. Charts & Insights Layout -->
+        <div class="main-grid">
+            
+            <!-- Left Side: Interactive Charts -->
+            <div class="charts-column">
+                
+                <!-- Chart 1: System Level Metrics -->
+                <div class="chart-card">
+                    <div class="spinner-overlay" id="spinner-system">
+                        <div class="spinner"></div>
+                    </div>
+                    <h3>
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        System Resource Trends
+                    </h3>
+                    <div class="chart-container" id="chart-system"></div>
+                </div>
+
+                <!-- Chart 2: Contention Analysis -->
+                <div class="chart-card">
+                    <div class="spinner-overlay" id="spinner-contention">
+                        <div class="spinner"></div>
+                    </div>
+                    <h3>
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        Hardware Contention Overlay
+                    </h3>
+                    <div class="chart-container" id="chart-contention"></div>
+                </div>
+
+                <!-- Chart 3: Stacked Process Shares -->
+                <div class="chart-card">
+                    <div class="spinner-overlay" id="spinner-procs">
+                        <div class="spinner"></div>
+                    </div>
+                    <h3>
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        Top Process Comparison
+                    </h3>
+                    <div class="chart-container" id="chart-procs"></div>
+                </div>
+
+            </div>
+
+            <!-- Right Side: Insight Panel -->
+            <div class="insights-panel">
+                <div class="insights-header">
+                    <h3>
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        Hardware Contention Insights
+                    </h3>
+                </div>
+                <div class="insights-list" id="insights-container">
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                        Running contention analysis...
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- JavaScript logic -->
+    <script>
+        // State variables
+        let selectedRange = "7d";
+        let selectedGranularity = "day";
+        let selectedProcess = "simulation_engine.exe";
+
+        // DOM elements
+        const rangeButtons = document.getElementById("range-buttons");
+        const granularityButtons = document.getElementById("granularity-buttons");
+        const processSelect = document.getElementById("process-select");
+        const insightsContainer = document.getElementById("insights-container");
+
+        // Initialization
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchMetadata();
+            loadDashboard();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            // Range filters
+            rangeButtons.addEventListener("click", (e) => {
+                if (e.target.classList.contains("filter-btn")) {
+                    Array.from(rangeButtons.children).forEach(btn => btn.classList.remove("active"));
+                    e.target.classList.add("active");
+                    selectedRange = e.target.getAttribute("data-range");
+                    loadDashboard();
+                }
+            });
+
+            // Granularity filters
+            granularityButtons.addEventListener("click", (e) => {
+                if (e.target.classList.contains("filter-btn")) {
+                    Array.from(granularityButtons.children).forEach(btn => btn.classList.remove("active"));
+                    e.target.classList.add("active");
+                    selectedGranularity = e.target.getAttribute("data-gran");
+                    loadDashboard();
+                }
+            });
+
+            // Target process selector
+            processSelect.addEventListener("change", (e) => {
+                selectedProcess = e.target.value;
+                document.getElementById("target-cpu-label").innerText = `${selectedProcess} CPU Avg`;
+                document.getElementById("target-ram-label").innerText = `${selectedProcess} Memory Avg`;
+                loadDashboard();
+            });
+        }
+
+        // Fetch Machine Metadata
+        async function fetchMetadata() {
+            try {
+                const response = await fetch("/api/metadata");
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById("meta-host").innerText = data.hostname || "N/A";
+                    document.getElementById("meta-os").innerText = data.os || "N/A";
+                    document.getElementById("meta-cores").innerText = data.cpu_count || "N/A";
+                    document.getElementById("meta-ram").innerText = (data.total_ram_gb ? `${data.total_ram_gb} GB` : "N/A");
+                }
+            } catch (err) {
+                console.error("Failed to load metadata", err);
+            }
+        }
+
+        // Show/hide loaders
+        function setLoaders(active) {
+            const overlays = ["spinner-system", "spinner-contention", "spinner-procs"];
+            overlays.forEach(id => {
+                const el = document.getElementById(id);
+                if (active) el.classList.add("active");
+                else el.classList.remove("active");
+            });
+        }
+
+        // Fetch metrics and render Plotly charts
+        async function loadDashboard() {
+            setLoaders(true);
+            try {
+                const url = `/api/metrics?range=${selectedRange}&granularity=${selectedGranularity}&target_process=${encodeURIComponent(selectedProcess)}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error("Data retrieval failed");
+                }
+                
+                const data = await response.json();
+                
+                // 1. Update Averaging Cards
+                document.getElementById("avg-sys-cpu").innerText = data.averages.sys_cpu.toFixed(1);
+                document.getElementById("avg-sys-ram").innerText = data.averages.sys_ram.toFixed(1);
+                document.getElementById("avg-tgt-cpu").innerText = data.averages.target_cpu.toFixed(1);
+                document.getElementById("avg-tgt-ram").innerText = data.averages.target_ram.toFixed(1);
+
+                // 2. Populate Process Dropdown dynamically
+                const currentSelection = selectedProcess;
+                processSelect.innerHTML = "";
+                data.process_names.forEach(name => {
+                    const opt = document.createElement("option");
+                    opt.value = name;
+                    opt.textContent = name;
+                    if (name === currentSelection) opt.selected = true;
+                    processSelect.appendChild(opt);
+                });
+
+                // 3. Render Plotly Charts (retaining high interactivity)
+                const config = { responsive: true, displayModeBar: false };
+                Plotly.newPlot("chart-system", data.system_chart.data, data.system_chart.layout, config);
+                Plotly.newPlot("chart-contention", data.contention_chart.data, data.contention_chart.layout, config);
+                Plotly.newPlot("chart-procs", data.procs_chart.data, data.procs_chart.layout, config);
+
+                // 4. Generate Contention Analysis Insights (Client-Side)
+                runInsightAnalysis(data);
+                
+            } catch (err) {
+                console.error("Error updating dashboard charts", err);
+                showChartErrorState();
+            } finally {
+                setLoaders(false);
+            }
+        }
+
+        // Display error message inside chart panels if loading fails
+        function showChartErrorState() {
+            const divs = ["chart-system", "chart-contention", "chart-procs"];
+            divs.forEach(id => {
+                document.getElementById(id).innerHTML = `
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        Failed to retrieve or compile metric charts. Verify Flask server.
+                    </div>
+                `;
+            });
+            insightsContainer.innerHTML = `
+                <div class="empty-state">
+                    Unable to run analyzer without metric streams.
+                </div>
+            `;
+        }
+
+        // Analyzer logic to check for resource spikes, throttled performance, and bad actors
+        function runInsightAnalysis(data) {
+            insightsContainer.innerHTML = "";
+            const insights = [];
+
+            // We look at data.system_chart to locate timestamps of high overall CPU utilization
+            const systemData = data.system_chart.data[0]; // Trace 0 is System CPU %
+            const systemCPU = systemData.y;
+            const timestamps = systemData.x;
+            
+            // Look up target app details
+            const targetDataTrace = data.contention_chart.data[0];
+            const targetCPU = targetDataTrace ? targetDataTrace.y : [];
+            
+            // Loop through and look for alerts
+            let contentionEvents = 0;
+            
+            for (let i = 0; i < systemCPU.length; i++) {
+                const sys_c = systemCPU[i];
+                const ts = timestamps[i];
+                const tgt_c = targetCPU[i] || 0;
+                const other_c = Math.max(0, sys_c - tgt_c);
+                
+                // Detection Rule 1: High CPU bottleneck caused by other processes
+                if (sys_c >= 80 && other_c > 45 && tgt_c < 20) {
+                    contentionEvents++;
+                    insights.push({
+                        time: ts,
+                        type: "critical",
+                        title: "Critical Resource Starvation",
+                        desc: `System CPU spiked to <b>${sys_c.toFixed(1)}%</b>. The target process was throttled down to <b>${tgt_c.toFixed(1)}%</b>, while external background tasks consumed <b>${other_c.toFixed(1)}%</b> of total CPU capability.`
+                    });
+                }
+                // Detection Rule 2: Heavy workload with slight system overload
+                else if (sys_c >= 90 && tgt_c >= 40) {
+                    insights.push({
+                        time: ts,
+                        type: "warning",
+                        title: "High System Load (Cooperative)",
+                        desc: `System utilization reached <b>${sys_c.toFixed(1)}%</b>. Target application was running at peak capacity (<b>${tgt_c.toFixed(1)}%</b> CPU). Watch out for thermal throttling.`
+                    });
+                }
+            }
+
+            // General Insights / Summaries
+            if (insights.length === 0) {
+                insights.push({
+                    time: "Aggregate Analysis",
+                    type: "normal",
+                    title: "System Performance Nominal",
+                    desc: `No critical contention bottlenecks detected during this timeframe. Average target process resource allocation remains stable at <b>${data.averages.target_cpu}%</b> CPU and <b>${data.averages.target_ram}%</b> RAM.`
+                });
+            } else {
+                // Prepend a summary alert if contention events are high
+                if (contentionEvents > 0) {
+                    insights.unshift({
+                        time: "Alert Summary",
+                        type: "critical",
+                        title: `Hardware Contention Detected`,
+                        desc: `Found <b>${contentionEvents}</b> distinct time blocks where external apps directly starved <b>${selectedProcess}</b> of CPU. We recommend checking automated scans or scheduler policies.`
+                    });
+                }
+            }
+
+            // Render to DOM
+            insights.forEach(item => {
+                const el = document.createElement("div");
+                el.className = `insight-item ${item.type}`;
+                el.innerHTML = `
+                    <span class="insight-time">${item.time}</span>
+                    <span class="insight-title">${item.title}</span>
+                    <p class="insight-desc">${item.desc}</p>
+                `;
+                insightsContainer.appendChild(el);
+            });
+        }
+    </script>
+</body>
+</html>
